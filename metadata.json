@@ -1,0 +1,7 @@
+{
+  "name": "AIZUL AURA ONE",
+  "description": "Um protótipo SaaS de alta fidelidade para Gestão de Clínicas, apresentando fluxos operacionais impulsionados por IA para recepcionistas, profissionais e gestores.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

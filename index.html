@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AIZUL AURA ONE</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+            },
+            colors: {
+              aura: {
+                50: '#fff1f2',
+                100: '#ffe4e6',
+                500: '#f43f5e', // Rose 500 para Estética
+                600: '#e11d48', // Rose 600
+                900: '#881337',
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      body { font-family: 'Inter', sans-serif; background-color: #fdfcfc; color: #1e293b; }
+      ::-webkit-scrollbar { width: 6px; height: 6px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+      ::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }
+      
+      .animate-fade-in { animation: fadeIn 0.3s ease-in-out; }
+      .animate-fade-in-up { animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+      
+      @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+      @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+      
+      .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+      .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 10px; }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "recharts": "https://esm.sh/recharts@^3.5.1",
+    "lucide-react": "https://esm.sh/lucide-react@^0.474.0",
+    "react": "https://esm.sh/react@^19.0.0",
+    "react/": "https://esm.sh/react@^19.0.0/",
+    "react-dom/client": "https://esm.sh/react-dom@^19.0.0/client",
+    "@google/genai": "https://esm.sh/@google/genai@^1.32.0",
+    "react-router-dom": "https://esm.sh/react-router-dom@^7.1.5",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@^2.48.1",
+    "xlsx": "https://esm.sh/xlsx@^0.18.5",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "@google/generative-ai": "https://esm.sh/@google/generative-ai@^0.24.1"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
