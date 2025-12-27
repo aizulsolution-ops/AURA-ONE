@@ -1,10 +1,18 @@
-
-/* src/services/geminiService.ts - VERSÃO COM @google/genai E ENV API KEY */
+/* src/services/geminiService.ts - VERSÃO BLINDADA VERCEL/VITE */
 import { GoogleGenAI } from "@google/genai";
 import { Patient, EvolutionRecord } from "../types";
 
-// Always use process.env.API_KEY obtained exclusively from the environment
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// 1. CAPTURA SEGURA DA CHAVE (Prioriza Vercel/Vite, depois fallback)
+// Isso resolve o erro "API Key must be set" porque garante que lemos a variável certa
+const API_KEY = 
+  import.meta.env.VITE_GEMINI_API_KEY || 
+  (typeof process !== 'undefined' ? process.env.API_KEY : '') || 
+  '';
+
+// 2. INICIALIZAÇÃO SEGURA
+// Se não houver chave, não crashamos o app aqui. Passamos uma string vazia temporária
+// ou evitamos instanciar se o SDK permitir (mas o SDK exige string, então tratamos no uso).
+const ai = new GoogleGenAI({ apiKey: API_KEY || "dummy_key_to_prevent_crash" });
 
 export type AnalysisMode = 'session_insight' | 'full_report';
 
@@ -15,9 +23,11 @@ export const generatePatientSummary = async (
 ): Promise<string> => {
 
   try {
-    // Validação de segurança: o SDK requer a chave configurada
-    if (!process.env.API_KEY) {
-      return "⚠️ Erro: Chave de API não configurada.";
+    // 3. VALIDAÇÃO NA HORA DO USO (Runtime Check)
+    // Aqui sim podemos avisar o usuário sem quebrar o site inteiro
+    if (!API_KEY || API_KEY === "dummy_key_to_prevent_crash") {
+      console.error("ERRO CRÍTICO: Chave Gemini não encontrada. Verifique VITE_GEMINI_API_KEY na Vercel.");
+      return "⚠️ Erro de Configuração: Chave de API da IA não está ativa no servidor.";
     }
 
     // 1. Contexto do Paciente
@@ -58,7 +68,7 @@ export const generatePatientSummary = async (
 
     // Using gemini-3-flash-preview for basic text summarization tasks
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-2.0-flash', // Atualizado para modelo estável (preview pode falhar)
       contents: prompt,
       config: {
         systemInstruction: systemInstruction,
