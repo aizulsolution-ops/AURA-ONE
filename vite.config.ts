@@ -3,8 +3,7 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
-    // Carrega variáveis de ambiente do diretório atual
-    // O terceiro parâmetro '' permite carregar todas as variáveis, não apenas as com prefixo VITE_
+    // Carrega todas as variáveis de ambiente, incluindo as do sistema (Vercel)
     const env = loadEnv(mode, process.cwd(), '');
 
     return {
@@ -14,14 +13,17 @@ export default defineConfig(({ mode }) => {
       },
       plugins: [react()],
       define: {
-        // CRIA A PONTE: Injeta as variáveis VITE_ onde o código espera process.env
-        // Isso corrige o erro "API Key must be set"
-        'process.env.GEMINI_API_KEY': JSON.stringify(env.VITE_GEMINI_API_KEY || env.GEMINI_API_KEY),
-        'process.env.VITE_GEMINI_API_KEY': JSON.stringify(env.VITE_GEMINI_API_KEY || env.GEMINI_API_KEY),
+        // CORREÇÃO CRÍTICA:
+        // Pega a variável VITE_GEMINI_API_KEY (definida na Vercel)
+        // E injeta na variável process.env.GEMINI_API_KEY (usada pelo SDK do Google)
+        'process.env.GEMINI_API_KEY': JSON.stringify(env.VITE_GEMINI_API_KEY),
         
-        // Supabase (caso seu código use process.env nas configurações do Supabase)
-        'process.env.SUPABASE_URL': JSON.stringify(env.VITE_SUPABASE_URL || env.SUPABASE_URL),
-        'process.env.SUPABASE_ANON_KEY': JSON.stringify(env.VITE_SUPABASE_ANON_KEY || env.SUPABASE_ANON_KEY),
+        // Garante que funciona também se o código chamar com VITE_
+        'process.env.VITE_GEMINI_API_KEY': JSON.stringify(env.VITE_GEMINI_API_KEY),
+        
+        // Bridge para Supabase (caso necessário)
+        'process.env.SUPABASE_URL': JSON.stringify(env.VITE_SUPABASE_URL),
+        'process.env.SUPABASE_ANON_KEY': JSON.stringify(env.VITE_SUPABASE_ANON_KEY),
       },
       resolve: {
         alias: {
