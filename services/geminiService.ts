@@ -1,4 +1,4 @@
-/* src/services/geminiService.ts - ARQUITETURA REST (IGUAL ERP CAPITAL) */
+/* src/services/geminiService.ts - VERSÃO ERP CAPITAL (2.0 FLASH + DIAGNÓSTICO) */
 import { Patient, EvolutionRecord } from "../types";
 
 // 1. CAPTURA SEGURA DA CHAVE
@@ -8,10 +8,35 @@ const API_KEY =
   process.env.GEMINI_API_KEY ||
   '';
 
-// URL direta da API (Mesmo padrão do ERP Capital, mas usando modelo Estável 1.5)
-const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
+// URL BASE (v1beta)
+const BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
+
+// MODELO ALVO (Igual ao ERP Capital/Chat Marina)
+const MODEL_NAME = "gemini-2.0-flash"; 
 
 export type AnalysisMode = 'session_insight' | 'full_report' | 'clinical_chat';
+
+// --- FUNÇÃO AUXILIAR: CONSULTA MODELOS DISPONÍVEIS ---
+// Roda automaticamente se a geração falhar para te mostrar o que está disponível
+async function logAvailableModels() {
+  try {
+    console.log("🔍 Consultando modelos disponíveis para esta Chave API...");
+    const response = await fetch(`${BASE_URL}/models?key=${API_KEY}`);
+    const data = await response.json();
+    
+    if (data.models) {
+      console.log("✅ MODELOS DISPONÍVEIS NA SUA CONTA:");
+      console.table(data.models.map((m: any) => ({ 
+        name: m.name.replace('models/', ''), 
+        methods: m.supportedGenerationMethods 
+      })));
+    } else {
+      console.error("❌ Não foi possível listar modelos:", data);
+    }
+  } catch (e) {
+    console.error("❌ Erro ao consultar modelos:", e);
+  }
+}
 
 export const generatePatientSummary = async (
   patient: Patient,
@@ -20,16 +45,14 @@ export const generatePatientSummary = async (
   userQuestion?: string
 ): Promise<string> => {
 
-  // Validação
   if (!API_KEY || API_KEY.length < 10) {
-    console.error("ERRO: Chave API inválida/vazia.");
-    return "⚠️ Erro de Configuração: Chave de API não identificada no servidor.";
+    return "⚠️ Erro de Configuração: Chave de API inválida.";
   }
 
   try {
     const patientContext = `PACIENTE: ${patient.name}, ${calculateAge(patient.birth_date)} anos.`;
     
-    // 2. CONSTRUÇÃO DO PROMPT (MANTENDO A LÓGICA DO AURA ONE)
+    // 2. CONSTRUÇÃO DO PROMPT
     let systemRole = "";
 
     switch (mode) {
@@ -45,19 +68,11 @@ export const generatePatientSummary = async (
         break;
 
       case 'full_report': 
-        systemRole = `
-          ATUE COMO: Auditor Clínico. 
-          OBJETIVO: Gerar um laudo técnico formal e detalhado baseada nas evoluções.
-          Use linguagem culta e técnica.
-        `;
+        systemRole = `ATUE COMO: Auditor Clínico. Gere laudo técnico formal.`;
         break;
 
       case 'clinical_chat': 
-        systemRole = `
-          ATUE COMO: Professor Universitário Doutor em Fisioterapia.
-          OBJETIVO: Mentoria clínica baseada em evidências.
-          TOM: Profissional, Acadêmico e Encorajador.
-        `;
+        systemRole = `ATUE COMO: Professor Universitário Doutor em Fisioterapia. Mentoria clínica.`;
         break;
     }
 
@@ -72,35 +87,35 @@ export const generatePatientSummary = async (
     `;
 
     if (mode === 'clinical_chat' && userQuestion) {
-      finalPrompt += `\n\nPERGUNTA DO PROFISSIONAL: "${userQuestion}"\n\nRESPOSTA DO PROFESSOR:`;
+      finalPrompt += `\n\nPERGUNTA: "${userQuestion}"\n\nRESPOSTA:`;
     }
 
-    // 3. CHAMADA REST (MÉTODO "MARINA/ERP CAPITAL")
-    // Removemos a dependência do SDK e usamos fetch puro
-    console.log(`🤖 Enviando requisição REST para Gemini (${mode})...`);
+    // 3. CHAMADA REST (PADRÃO ERP CAPITAL)
+    console.log(`🤖 Tentando conexão com: ${MODEL_NAME}...`);
 
-    const response = await fetch(`${GEMINI_URL}?key=${API_KEY}`, {
+    const response = await fetch(`${BASE_URL}/models/${MODEL_NAME}:generateContent?key=${API_KEY}`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents: [{ 
-          parts: [{ text: finalPrompt }] 
-        }]
+        contents: [{ parts: [{ text: finalPrompt }] }]
       })
     });
 
     const data = await response.json();
 
-    // Tratamento de erro da API
+    // 4. TRATAMENTO DE ERRO + AUTO-DIAGNÓSTICO
     if (!response.ok) {
-      console.error("ERRO REST API:", data);
-      if (data.error?.message) return `⚠️ Erro da IA: ${data.error.message}`;
-      return "⚠️ A IA recusou a conexão.";
+      console.error("ERRO API:", data);
+      
+      // SE DER ERRO, CHAMA A CONSULTA DE MODELOS
+      await logAvailableModels();
+
+      if (data.error?.message?.includes('not found')) {
+        return `⚠️ Modelo ${MODEL_NAME} não encontrado. Olhe o Console (F12) para ver a lista de modelos disponíveis.`;
+      }
+      return `⚠️ Erro da IA: ${data.error?.message || 'Falha desconhecida'}`;
     }
 
-    // Extração da resposta (Estrutura padrão do Google)
     if (data.candidates && data.candidates.length > 0) {
        return data.candidates[0].content.parts[0].text;
     }
@@ -109,7 +124,7 @@ export const generatePatientSummary = async (
 
   } catch (error: any) {
     console.error("❌ ERRO FETCH:", error);
-    return "⚠️ Falha na conexão com o Google. Verifique sua internet.";
+    return "⚠️ Falha na conexão. Verifique sua internet.";
   }
 };
 
@@ -118,7 +133,6 @@ function calculateAge(birthDate?: string | null): string {
     const today = new Date();
     const birth = new Date(birthDate);
     let age = today.getFullYear() - birth.getFullYear();
-    const m = today.getMonth() - birth.getMonth();
-    if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+    if ((today.getMonth() < birth.getMonth()) || (today.getMonth() === birth.getMonth() && today.getDate() < birth.getDate())) age--;
     return age.toString();
 }
