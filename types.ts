@@ -1,4 +1,5 @@
 
+
 /* src/types.ts - FONTE DA VERDADE (AUDITORIA 18/12 + ATUALIZAÇÃO PRONTUÁRIO V2) */
 
 export enum ViewState {
@@ -46,6 +47,24 @@ export interface Patient {
   last_visit?: string | null;
   avatar_url?: string | null;
   package_balance?: number | null;
+  // --- FIXED: Added missing fields used in forms ---
+  social_name?: string | null;
+  gender?: string | null;
+  sex?: string | null;
+  whatsapp?: string | null;
+  profession?: string | null;
+  zip_code?: string | null;
+  address_street?: string | null;
+  address_number?: string | null;
+  address_complement?: string | null;
+  address_neighborhood?: string | null;
+  address_city?: string | null;
+  address_state?: string | null;
+  notes?: string | null;
+  meta?: any | null;
+  emergency_contact_name?: string | null;
+  emergency_contact_phone?: string | null;
+  emergency_contact_kinship?: string | null;
 }
 
 // Added PatientUI for components that need enriched patient data for display
@@ -83,6 +102,12 @@ export interface ClinicalEvolution {
   
   evolved_at: string;
   created_at?: string;
+  // --- FIXED: Added evolution_data property ---
+  evolution_data?: {
+    pain_status?: string;
+    pain_level?: number;
+    [key: string]: any;
+  } | null;
 }
 
 // --- NOVO: Interface da Anamnese Estruturada ---
@@ -225,3 +250,4 @@ export interface SystemUser {
   status: string;
   avatar?: string;
 }
+

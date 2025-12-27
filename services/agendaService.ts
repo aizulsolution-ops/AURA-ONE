@@ -1,3 +1,4 @@
+
 /* src/services/agendaService.ts - VERSÃO 2.0 (FULL RESTORE + DAY CLOSING) */
 import { supabase } from './supabase';
 
@@ -24,6 +25,8 @@ export interface AgendaEvent {
   specialty?: string; // Retorno auxiliar da RPC v2
   cancel_reason_id?: string;
   is_exception: boolean;
+  // FIXED: Added reception_alert to interface
+  reception_alert?: string;
 }
 
 export interface Specialty {
@@ -82,6 +85,8 @@ export const createSingleAppointment = async (payload: Partial<AgendaEvent>) => 
         end_at: payload.end_at,
         status: payload.status || 'scheduled',
         notes: payload.notes,
+        // FIXED: Include reception_alert in dbPayload
+        reception_alert: payload.reception_alert,
         is_exception: false
     };
 
@@ -111,6 +116,8 @@ export const updateAgendaEvent = async (eventId: string, payload: Partial<Agenda
         if (payload.specialty_id !== undefined) safePayload.specialty_id = payload.specialty_id;
         if (payload.notes !== undefined) safePayload.notes = payload.notes;
         if (payload.status !== undefined) safePayload.status = payload.status;
+        // FIXED: Include reception_alert in safePayload
+        if (payload.reception_alert !== undefined) safePayload.reception_alert = payload.reception_alert;
         
         // updated_at removido (Trigger do banco cuida disso)
 

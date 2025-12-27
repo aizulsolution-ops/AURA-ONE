@@ -1,11 +1,10 @@
-/* src/services/geminiService.ts - VERSÃO COM CHAVE DIRETA */
-import { GoogleGenerativeAI } from "@google/generative-ai";
+
+/* src/services/geminiService.ts - VERSÃO COM @google/genai E ENV API KEY */
+import { GoogleGenAI } from "@google/genai";
 import { Patient, EvolutionRecord } from "../types";
 
-// ✅ SUA CHAVE DO GOOGLE CLOUD (Copiada do seu print)
-const API_KEY = "AIzaSyBs1RGBm9BMGqsc_0iZ1h75hoCADUYMlTg";
-
-const genAI = new GoogleGenerativeAI(API_KEY);
+// Always use process.env.API_KEY obtained exclusively from the environment
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export type AnalysisMode = 'session_insight' | 'full_report';
 
@@ -16,12 +15,10 @@ export const generatePatientSummary = async (
 ): Promise<string> => {
 
   try {
-    // Validação de segurança básica
-    if (!API_KEY || API_KEY.length < 10) {
-      return "⚠️ Erro: Chave de API inválida.";
+    // Validação de segurança: o SDK requer a chave configurada
+    if (!process.env.API_KEY) {
+      return "⚠️ Erro: Chave de API não configurada.";
     }
-
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
 
     // 1. Contexto do Paciente
     const patientContext = `PACIENTE: ${patient.name}, ${calculateAge(patient.birth_date)} anos.`;
@@ -50,8 +47,6 @@ export const generatePatientSummary = async (
     }
 
     const prompt = `
-      ${systemInstruction}
-      
       DADOS DO PACIENTE:
       ${patientContext}
       
@@ -61,13 +56,21 @@ export const generatePatientSummary = async (
       GERE O RESUMO AGORA:
     `;
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    return response.text();
+    // Using gemini-3-flash-preview for basic text summarization tasks
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: prompt,
+      config: {
+        systemInstruction: systemInstruction,
+      },
+    });
+
+    // Directly access the text property as per guidelines
+    return response.text || "⚠️ A IA não retornou conteúdo.";
     
   } catch (error) {
     console.error("Erro ao chamar Gemini:", error);
-    return "⚠️ A IA não conseguiu responder. Verifique se a 'Generative Language API' está ativada no Google Cloud.";
+    return "⚠️ A IA não conseguiu responder no momento. Verifique sua conexão e chave de API.";
   }
 };
 

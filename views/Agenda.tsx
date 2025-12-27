@@ -1,12 +1,11 @@
-/* src/views/Agenda.tsx - VERSÃO 30.0 (FIX: LAYOUT HEADER + SMART TIME FOCUS + ERRO ALERT) */
+/* src/views/Agenda.tsx - CORREÇÃO: SIDEBAR RETRÁTIL MOBILE UNIFICADA */
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '../services/supabase'; 
-import * as agendaService from '../services/agendaService';
 import { listPatients } from '../services/patientService';
 import { useAuth } from '../contexts/AuthContext';
 import { Patient } from '../types';
 
-// --- COMPONENTES EXTERNOS ---
+// --- COMPONENTES AUXILIARES ---
 import { AgendaMacroView } from '../components/agenda/AgendaMacroView'; 
 import { AppointmentFormModal } from '../components/agenda/AppointmentFormModal'; 
 import { DayClosingModal } from '../components/agenda/DayClosingModal'; 
@@ -18,8 +17,8 @@ import {
   Plus, User, Bell, CheckCircle2, X, Trash2, Clock, 
   Lock, AlertTriangle, CalendarDays, Filter, Search,
   Menu, ChevronFirst, Edit3, ArrowRightCircle, History, LayoutGrid,
-  MessageCircle, PlayCircle, UserCheck, CreditCard, Sparkles, StickyNote, Save,
-  Star, AlertCircle 
+  MessageCircle, PlayCircle, UserCheck, CreditCard, Sparkles, Save,
+  Star, AlertCircle, ChevronDown, List
 } from 'lucide-react';
 
 // ============================================================================
@@ -35,12 +34,10 @@ interface AgendaItem {
   patient_phone?: string;      
   insurance_name?: string;     
   patient_risk?: string;
-  
   specialty_name: string;
   specialty_id: string;
   professional_name?: string;
   assigned_to_profile_id?: string;
-  
   status: string; 
   starts_at: string; 
   updated_at: string;
@@ -106,9 +103,38 @@ const openWhatsApp = (phone?: string) => {
 };
 
 // ============================================================================
-// 3. SUB-COMPONENTES INTERNOS (Auxiliares)
+// 3. SUB-COMPONENTES INTERNOS
 // ============================================================================
 
+// --- DRAWER MOBILE (MANTIDO) ---
+const MobileFilterDrawer = ({ isOpen, onClose, selectedDate, onDateChange, specialties, activeFilter, onFilterChange }: any) => {
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 z-[100] md:hidden">
+            <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-fade-in" onClick={onClose}></div>
+            <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl shadow-2xl animate-slide-up overflow-hidden max-h-[85vh] flex flex-col">
+                <div className="flex justify-center pt-3 pb-1" onClick={onClose}><div className="w-12 h-1.5 bg-slate-200 rounded-full"></div></div>
+                <div className="p-6 overflow-y-auto">
+                    <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><CalendarIcon className="text-blue-600"/> Navegação</h3>
+                    <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 mb-6 flex items-center justify-between">
+                        <button onClick={() => onDateChange(new Date(selectedDate.setDate(selectedDate.getDate() - 1)))} className="p-3 bg-white rounded-xl shadow-sm border border-slate-100 text-slate-500 active:scale-95"><ChevronLeft/></button>
+                        <div className="text-center"><span className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">{selectedDate.getFullYear()}</span><span className="block text-xl font-black text-slate-800 capitalize">{selectedDate.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' })}</span></div>
+                        <button onClick={() => onDateChange(new Date(selectedDate.setDate(selectedDate.getDate() + 1)))} className="p-3 bg-white rounded-xl shadow-sm border border-slate-100 text-slate-500 active:scale-95"><ChevronRight/></button>
+                    </div>
+                    <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><Filter className="text-blue-600"/> Filtrar Agenda</h3>
+                    <div className="flex flex-wrap gap-2">
+                        <button onClick={() => { onFilterChange(null); onClose(); }} className={`px-4 py-3 rounded-xl text-xs font-bold uppercase transition-all border flex-grow text-center ${activeFilter === null ? 'bg-blue-600 text-white border-blue-600 shadow-lg' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}>Todos</button>
+                        {specialties.map((spec: any) => (
+                            <button key={spec.id} onClick={() => { onFilterChange(spec.id); onClose(); }} className={`px-4 py-3 rounded-xl border transition-all shadow-sm flex-grow text-center ${activeFilter === spec.id ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}`}><span className="text-xs font-bold uppercase">{spec.custom_name || spec.short_name || spec.name}</span></button>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// --- MODAIS ORIGINAIS ---
 const PatientSearchModal = ({ isOpen, onClose, patients, onSelectPatient }: any) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [history, setHistory] = useState<any[]>([]);
@@ -282,7 +308,7 @@ const AppointmentDetailsModal = ({ event, onClose, onStartVisit, onEdit, onReque
 };
 
 // ============================================================================
-// 4. COMPONENTE PRINCIPAL (AGENDA) - INTEGRADO
+// 4. COMPONENTE PRINCIPAL (AGENDA) - CORRIGIDO
 // ============================================================================
 
 const Agenda: React.FC<any> = ({ onNavigate }) => {
@@ -296,9 +322,13 @@ const Agenda: React.FC<any> = ({ onNavigate }) => {
     const [activeSlot, setActiveSlot] = useState<string | null>(null);
     const [activeFilter, setActiveFilter] = useState<string | null>(null); 
     const [loading, setLoading] = useState(true);
+    
+    // ESTADO UNIFICADO DA SIDEBAR (Desktop e Mobile)
     const [isSidebarOpen, setIsSidebarOpen] = useState(true); 
+    
     const [toast, setToast] = useState<{msg: string, type: 'success' | 'info'} | null>(null);
     const [clinicRules, setClinicRules] = useState<any>(null);
+    const [isDrawerOpen, setIsDrawerOpen] = useState(false); // Apenas para o filtro superior
 
     // --- MODAIS ---
     const [showNewModal, setShowNewModal] = useState(false);
@@ -307,15 +337,15 @@ const Agenda: React.FC<any> = ({ onNavigate }) => {
     const [showClosingModal, setShowClosingModal] = useState(false); 
     const [newModalParams, setNewModalParams] = useState({ date: '', time: '' });
     
-    // --- ESTADOS DE SELEÇÃO E AÇÃO ---
+    // --- ESTADOS DE SELEÇÃO ---
     const [selectedEvent, setSelectedEvent] = useState<AgendaItem | null>(null);
     const [appointmentToEdit, setAppointmentToEdit] = useState<AgendaItem | null>(null); 
-    const [alertModalEvent, setAlertModalEvent] = useState<AgendaItem | null>(null); // FIX: ESTADO ADICIONADO
+    const [alertModalEvent, setAlertModalEvent] = useState<AgendaItem | null>(null); 
     
-    // --- ESTADOS DE VISUALIZAÇÃO ---
+    // --- MACRO VIEW ---
     const [macroViewMode, setMacroViewMode] = useState<'month' | 'week' | null>(null);
 
-    // --- ESTADOS DE EXCLUSÃO ---
+    // --- DELETE ---
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [eventIdToDelete, setEventIdToDelete] = useState<string | null>(null);
     const [deleting, setDeleting] = useState(false);
@@ -347,7 +377,7 @@ const Agenda: React.FC<any> = ({ onNavigate }) => {
         loadClinicData();
     }, [clinicId]);
 
-    // --- SLOTS + TIME AWARE SCROLL ---
+    // --- SLOTS ---
     const timeSlots = useMemo(() => {
         if (!clinicRules) return ['07:00','08:00','09:00','10:00','11:00','14:00','15:00','16:00','17:00','18:00'];
         const slots = [];
@@ -369,35 +399,28 @@ const Agenda: React.FC<any> = ({ onNavigate }) => {
         return slots;
     }, [clinicRules]);
 
-    // --- AUTO-SCROLL INTELIGENTE ---
+    // --- AUTO-SCROLL ---
     useEffect(() => {
-        if (timeSlots.length > 0) {
+        if (timeSlots.length > 0 && !activeSlot) {
             const now = new Date();
             const currentMinutes = now.getHours() * 60 + now.getMinutes();
             let closestSlot = timeSlots[0];
             let maxMinutes = -1;
-
             timeSlots.forEach(slot => {
                 const [h, m] = slot.split(':').map(Number);
                 const slotMinutes = h * 60 + m;
-                // Encontra o último slot que já começou (Floor)
                 if (slotMinutes <= currentMinutes && slotMinutes > maxMinutes) {
                     maxMinutes = slotMinutes;
                     closestSlot = slot;
                 }
             });
-
-            if (!activeSlot) {
-                setActiveSlot(closestSlot);
-            }
-
-            // Scroll automático
+            setActiveSlot(closestSlot);
             setTimeout(() => {
                 const element = document.getElementById(`slot-${closestSlot}`);
                 if (element) element.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }, 500);
         }
-    }, [timeSlots]);
+    }, [timeSlots, activeSlot]);
 
     // --- FETCH ---
     const fetchAgenda = useCallback(async () => {
@@ -529,14 +552,8 @@ const Agenda: React.FC<any> = ({ onNavigate }) => {
                 ev.id === eventIdToDelete ? { ...ev, status: 'canceled' } : ev
             ));
             setToast({ msg: 'Agendamento cancelado com sucesso!', type: 'info' });
-        } catch (e: any) { 
-            console.error(e);
-            alert(`Erro ao cancelar: ${e.message}`); 
-        } finally {
-            setDeleting(false);
-            setShowDeleteModal(false);
-            setEventIdToDelete(null);
-        }
+        } catch (e: any) { console.error(e); alert(`Erro ao cancelar: ${e.message}`); } 
+        finally { setDeleting(false); setShowDeleteModal(false); setEventIdToDelete(null); }
     };
 
     const handleStartVisit = (event: AgendaItem) => {
@@ -556,19 +573,16 @@ const Agenda: React.FC<any> = ({ onNavigate }) => {
             if (!groups[hour]) groups[hour] = [];
             groups[hour].push(ev);
         });
-
-        Object.keys(groups).forEach(hour => {
-            groups[hour].sort((a, b) => {
-                const aArrived = ['checked_in', 'checkin'].includes(a.status);
-                const bArrived = ['checked_in', 'checkin'].includes(b.status);
-                if (aArrived && !bArrived) return -1;
-                if (!aArrived && bArrived) return 1;
-                if (aArrived && bArrived) return new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime();
-                return 0;
-            });
-        });
         return groups;
     }, [events, activeFilter, specialtiesConfig]);
+
+    const handleSlotClick = (time: string) => {
+        setActiveSlot(time);
+        // MOBILE ONLY: Fecha a sidebar ao clicar para focar no conteúdo
+        if (window.innerWidth < 768) {
+            setIsSidebarOpen(false);
+        }
+    };
 
     const dateDisplay = selectedDate.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'long' });
     const headerSpecialties = useMemo(() => specialtiesConfig.filter(s => s.is_favorite).slice(0, 5), [specialtiesConfig]);
@@ -586,69 +600,71 @@ const Agenda: React.FC<any> = ({ onNavigate }) => {
                 <Plus size={32} className="group-hover:rotate-90 transition-transform duration-300"/>
             </button>
 
-            {/* HEADER REORGANIZADO */}
-            <div className="flex-none bg-white border-b border-slate-200 px-4 py-3 z-20 shadow-sm">
-                <div className="flex items-center gap-6">
-                    <div className="flex items-center gap-4">
-                        <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 text-slate-400 hover:text-blue-600 transition-all">
-                            {isSidebarOpen ? <ChevronFirst size={24}/> : <Menu size={24}/>}
-                        </button>
-                        <div className="flex items-center bg-slate-100 rounded-xl p-1 shadow-inner border border-slate-200/50">
-                            <button onClick={() => setSelectedDate(new Date(selectedDate.setDate(selectedDate.getDate() - 1)))} className="p-1.5 hover:bg-white rounded-lg text-slate-500 transition-all"><ChevronLeft size={18}/></button>
-                            <div className="px-3 text-center min-w-[130px]">
-                                <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">{selectedDate.getFullYear()}</span>
-                                <span className="block text-sm font-black text-slate-800 capitalize leading-none">{dateDisplay}</span>
-                            </div>
-                            <button onClick={() => setSelectedDate(new Date(selectedDate.setDate(selectedDate.getDate() + 1)))} className="p-1.5 hover:bg-white rounded-lg text-slate-500 transition-all"><ChevronRight size={18}/></button>
-                        </div>
-                        <div className="hidden md:flex bg-slate-100 rounded-lg p-1 gap-1">
-                            <button onClick={() => setMacroViewMode('week')} className="px-3 py-1.5 text-xs font-bold text-slate-500 hover:bg-white hover:shadow-sm rounded-md transition-all uppercase">Semana</button>
-                            <button onClick={() => setMacroViewMode('month')} className="px-3 py-1.5 text-xs font-bold text-slate-500 hover:bg-white hover:shadow-sm rounded-md transition-all uppercase">Mês</button>
+            {/* HEADER ADAPTÁVEL */}
+            <div className="bg-white border-b border-slate-200 shrink-0 z-30 shadow-sm relative">
+                
+                {/* MOBILE HEADER (NOVO) */}
+                <div className="md:hidden px-4 py-3 flex items-center justify-between">
+                    <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 -ml-2 text-slate-400">
+                        <Menu size={24}/>
+                    </button>
+                    <div onClick={() => setIsDrawerOpen(true)} className="flex flex-col items-center cursor-pointer active:scale-95 transition-transform">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Exibindo</span>
+                        <div className="flex items-center gap-1">
+                            <span className="text-base font-black text-slate-800 capitalize">{dateDisplay.split(',')[0]}</span>
+                            <ChevronDown size={14} className="text-blue-600 mb-0.5"/>
                         </div>
                     </div>
+                    <button onClick={() => setIsDrawerOpen(true)} className={`p-2 rounded-xl transition-colors ${activeFilter ? 'bg-blue-100 text-blue-600' : 'text-slate-400 hover:bg-slate-50'}`}>
+                        <Filter size={20} className={activeFilter ? 'fill-blue-600' : ''} />
+                    </button>
+                </div>
 
-                    {/* BARRA DE ESPECIALIDADES REORGANIZADA */}
-                    <div className="hidden md:flex flex-1 items-center overflow-x-auto scrollbar-hide px-2 border-l border-slate-200 ml-2">
-                        {/* Botão Grid AGORA AQUI */}
-                        <button 
-                            onClick={() => setShowAllSpecsModal(true)} 
-                            className="h-9 w-9 flex-none flex items-center justify-center rounded-lg bg-blue-50 border border-blue-100 text-blue-600 hover:bg-blue-100 transition-all mr-3" 
-                            title="Ver todas especialidades"
-                        >
-                            <LayoutGrid size={18}/>
-                        </button>
-
-                        <div className="h-6 w-px bg-slate-200 mx-2 flex-none"></div>
-
-                        <button 
-                            onClick={() => setActiveFilter(null)}
-                            className={`h-9 px-4 rounded-lg text-[10px] font-bold uppercase transition-all border flex items-center justify-center gap-2 shadow-sm flex-none ${activeFilter === null ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
-                        >
-                            <UserCheck size={14} /> TODOS
-                        </button>
-
-                        {headerSpecialties.map(spec => (
-                            <button 
-                                key={spec.id} 
-                                onClick={() => setActiveFilter(activeFilter === spec.id ? null : spec.id)} 
-                                className={`h-9 px-3 rounded-lg border transition-all shadow-sm flex items-center gap-2 min-w-[80px] flex-none whitespace-nowrap ${activeFilter === spec.id ? 'bg-blue-600 text-white border-blue-600 shadow-md transform scale-[1.02]' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50'}`}
-                            >
-                                {spec.is_favorite && activeFilter !== spec.id && <Star size={10} className="text-amber-400 fill-amber-400" />}
-                                <span className="text-[10px] font-bold uppercase truncate max-w-[100px]">{spec.custom_name || spec.short_name || spec.name}</span>
+                {/* DESKTOP HEADER (ORIGINAL) */}
+                <div className="hidden md:flex px-4 py-3 items-center justify-between">
+                    <div className="flex items-center gap-6">
+                        <div className="flex items-center gap-4">
+                            <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 text-slate-400 hover:text-blue-600 transition-all">
+                                {isSidebarOpen ? <ChevronFirst size={24}/> : <Menu size={24}/>}
                             </button>
-                        ))}
+                            <div className="flex items-center bg-slate-100 rounded-xl p-1 shadow-inner border border-slate-200/50">
+                                <button onClick={() => setSelectedDate(new Date(selectedDate.setDate(selectedDate.getDate() - 1)))} className="p-1.5 hover:bg-white rounded-lg text-slate-500 transition-all"><ChevronLeft size={18}/></button>
+                                <div className="px-3 text-center min-w-[130px]">
+                                    <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">{selectedDate.getFullYear()}</span>
+                                    <span className="block text-sm font-black text-slate-800 capitalize leading-none">{dateDisplay}</span>
+                                </div>
+                                <button onClick={() => setSelectedDate(new Date(selectedDate.setDate(selectedDate.getDate() + 1)))} className="p-1.5 hover:bg-white rounded-lg text-slate-500 transition-all"><ChevronRight size={18}/></button>
+                            </div>
+                            <div className="bg-slate-100 rounded-lg p-1 gap-1 flex">
+                                <button onClick={() => setMacroViewMode('week')} className="px-3 py-1.5 text-xs font-bold text-slate-500 hover:bg-white hover:shadow-sm rounded-md transition-all uppercase">Semana</button>
+                                <button onClick={() => setMacroViewMode('month')} className="px-3 py-1.5 text-xs font-bold text-slate-500 hover:bg-white hover:shadow-sm rounded-md transition-all uppercase">Mês</button>
+                            </div>
+                        </div>
+                        <div className="flex flex-1 items-center overflow-x-auto scrollbar-hide px-2 border-l border-slate-200 ml-2">
+                             <button onClick={() => setShowAllSpecsModal(true)} className="h-9 w-9 flex-none flex items-center justify-center rounded-lg bg-blue-50 border border-blue-100 text-blue-600 hover:bg-blue-100 transition-all mr-3"><LayoutGrid size={18}/></button>
+                             <div className="h-6 w-px bg-slate-200 mx-2 flex-none"></div>
+                             <button onClick={() => setActiveFilter(null)} className={`h-9 px-4 rounded-lg text-[10px] font-bold uppercase transition-all border flex items-center justify-center gap-2 shadow-sm flex-none ${activeFilter === null ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}><UserCheck size={14} /> TODOS</button>
+                             {headerSpecialties.map(spec => (
+                                 <button key={spec.id} onClick={() => setActiveFilter(activeFilter === spec.id ? null : spec.id)} className={`h-9 px-3 rounded-lg border transition-all shadow-sm flex items-center gap-2 min-w-[80px] flex-none ml-2 ${activeFilter === spec.id ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>{spec.custom_name || spec.short_name || spec.name}</button>
+                             ))}
+                        </div>
                     </div>
-
-                    {/* FERRAMENTAS DIREITA */}
                     <div className="flex items-center gap-2 border-l border-slate-200 pl-4">
-                        <button onClick={() => setShowSearchModal(true)} className="h-9 w-9 flex items-center justify-center rounded-lg bg-slate-50 border border-slate-200 text-slate-400 hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50 transition-all" title="Buscar Paciente"><Search size={18}/></button>
+                        <button onClick={() => setShowSearchModal(true)} className="h-9 w-9 flex items-center justify-center rounded-lg bg-slate-50 border border-slate-200 text-slate-400 hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50 transition-all"><Search size={18}/></button>
                         <button onClick={() => setShowClosingModal(true)} className="h-9 px-3 rounded-lg border border-red-100 bg-red-50 text-red-600 flex items-center gap-2 text-[10px] font-bold uppercase hover:bg-red-100 transition-all ml-2"><Lock size={14} /> Fechar Dia</button>
                     </div>
                 </div>
             </div>
 
-            <div className="flex-1 flex overflow-hidden">
-                <div className={`bg-white border-r border-slate-200 overflow-y-auto custom-scrollbar transition-all duration-300 flex-none ${isSidebarOpen ? 'w-24 md:w-32' : 'w-0 opacity-0'}`}>
+            {/* --- ÁREA PRINCIPAL --- */}
+            <div className="flex-1 flex overflow-hidden relative">
+                
+                {/* SIDEBAR DE HORÁRIOS (RETRÁTIL NO MOBILE) */}
+                <div className={`
+                    bg-white border-r border-slate-200 overflow-y-auto custom-scrollbar flex-none transition-all duration-300 ease-in-out z-10
+                    absolute md:static h-full
+                    ${isSidebarOpen ? 'w-24 md:w-32 translate-x-0' : 'w-0 -translate-x-full md:w-0 md:hidden'}
+                `}>
                     <div className="flex flex-col">
                         {timeSlots.map(time => {
                             const count = eventsByHour[time]?.length || 0;
@@ -656,8 +672,8 @@ const Agenda: React.FC<any> = ({ onNavigate }) => {
                             return (
                                 <button 
                                     key={time}
-                                    id={`slot-${time}`} // ID para scroll
-                                    onClick={() => setActiveSlot(time)}
+                                    id={`slot-${time}`} 
+                                    onClick={() => handleSlotClick(time)}
                                     className={`h-14 w-full flex items-center justify-between px-4 border-b border-slate-100 transition-all group ${isActive ? 'bg-blue-50 text-blue-700 border-l-4 border-l-blue-600 border-b-blue-100' : 'hover:bg-slate-50 text-slate-500 border-l-4 border-l-transparent'}`}
                                 >
                                     <span className={`text-sm ${isActive ? 'font-black' : 'font-bold'}`}>{time}</span>
@@ -668,16 +684,27 @@ const Agenda: React.FC<any> = ({ onNavigate }) => {
                     </div>
                 </div>
 
-                <div className="flex-1 bg-slate-50/50 p-3 md:p-4 overflow-y-auto pb-24">
-                    <div className="max-w-5xl mx-auto">
+                {/* ÁREA DE CONTEÚDO */}
+                <div className="flex-1 bg-slate-50/50 p-3 md:p-4 overflow-y-auto pb-24 flex flex-col min-w-0">
+                    
+                    {/* Botão de Voltar para Horários (Mobile Only - Quando fechada) */}
+                    {!isSidebarOpen && (
+                        <div className="md:hidden mb-4 flex-none animate-fade-in">
+                            <button onClick={() => setIsSidebarOpen(true)} className="flex items-center gap-2 text-slate-500 bg-white border border-slate-200 px-4 py-2 rounded-lg font-bold text-xs shadow-sm active:bg-slate-50">
+                                <List size={16}/> Voltar para Horários
+                            </button>
+                        </div>
+                    )}
+
+                    <div className="max-w-5xl mx-auto w-full">
                         {loading ? (
                             <div className="flex justify-center pt-20"><div className="animate-spin rounded-full h-10 w-10 border-4 border-slate-200 border-t-blue-600"></div></div>
                         ) : activeSlot ? (
                             <div className="animate-fade-in">
                                 <div className="flex items-center gap-2 mb-4">
                                     <h2 className="text-xl font-bold text-slate-700 tracking-tight">{activeSlot}</h2>
-                                    {activeFilter && <div className="flex items-center gap-2 bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-bold animate-scale-in"><Filter size={12}/>{specialtiesConfig.find(s => s.id === activeFilter)?.custom_name}<button onClick={() => setActiveFilter(null)} className="hover:bg-blue-200 rounded-full p-0.5"><X size={12}/></button></div>}
-                                    <div className="h-px bg-slate-200 flex-1"></div>
+                                    <span className="text-xs text-slate-400 font-medium hidden md:inline-block">Agenda Detalhada</span>
+                                    {activeFilter && <div className="flex items-center gap-2 bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-bold animate-scale-in ml-auto md:ml-2"><Filter size={12}/>{specialtiesConfig.find(s => s.id === activeFilter)?.custom_name}<button onClick={() => setActiveFilter(null)} className="hover:bg-blue-200 rounded-full p-0.5"><X size={12}/></button></div>}
                                 </div>
 
                                 {eventsByHour[activeSlot]?.length > 0 ? (
@@ -688,7 +715,7 @@ const Agenda: React.FC<any> = ({ onNavigate }) => {
                                                 data={ev} 
                                                 onStatusChange={handleStatusChange}
                                                 onClick={(item: any) => setSelectedEvent(item)}
-                                                onAlertClick={(item: any) => { setAlertModalEvent(item); setShowAlertModal(true); }}
+                                                onAlertClick={(item: any) => { setAlertModalEvent(item); setShowAlertModal(true); }} // Correção alert
                                             />
                                         ))}
                                         <button onClick={() => { setAppointmentToEdit(null); setNewModalParams({ date: formatDateForRPC(selectedDate), time: activeSlot || '' }); setShowNewModal(true); }} className="w-full py-3 border-2 border-dashed border-slate-200 rounded-xl flex items-center justify-center text-slate-400 hover:border-blue-300 hover:text-blue-600 transition-all hover:bg-white"><Plus size={18} className="mr-2"/> Encaixar Paciente</button>
@@ -702,65 +729,28 @@ const Agenda: React.FC<any> = ({ onNavigate }) => {
                                 )}
                             </div>
                         ) : (
-                            <div className="flex flex-col items-center justify-center h-full text-slate-400 font-medium animate-pulse opacity-50"><CalendarDays size={64} className="mb-4"/><p>Selecione um horário à esquerda</p></div>
+                            <div className="flex flex-col items-center justify-center h-full text-slate-400 font-medium animate-pulse opacity-50"><CalendarDays size={64} className="mb-4"/><p>Selecione um horário</p></div>
                         )}
                     </div>
                 </div>
             </div>
 
-            {/* MODAIS */}
-            <AppointmentDetailsModal 
-                event={selectedEvent} 
-                onClose={() => setSelectedEvent(null)} 
-                onStartVisit={handleStartVisit}
-                onEdit={handleEdit} 
-                onRequestCancel={requestDelete} 
-            />
+            {/* --- MODAIS GLOBAIS --- */}
+            <MobileFilterDrawer isOpen={isDrawerOpen} onClose={() => setIsDrawerOpen(false)} selectedDate={selectedDate} onDateChange={setSelectedDate} specialties={specialtiesConfig} activeFilter={activeFilter} onFilterChange={setActiveFilter} />
 
-            <ReceptionAlertModal 
-                event={alertModalEvent}
-                onClose={() => { setShowAlertModal(false); setAlertModalEvent(null); }}
-                onSave={handleAlertSave}
-            />
+            <AppointmentDetailsModal event={selectedEvent} onClose={() => setSelectedEvent(null)} onStartVisit={handleStartVisit} onEdit={handleEdit} onRequestCancel={requestDelete} />
 
-            <DeleteConfirmationModal
-                isOpen={showDeleteModal}
-                loading={deleting}
-                onClose={() => setShowDeleteModal(false)}
-                onConfirm={confirmDelete}
-            />
+            <ReceptionAlertModal event={alertModalEvent} onClose={() => { setAlertModalEvent(null); }} onSave={handleAlertSave} />
 
-            {/* Modal de Especialidades (Dupla Ação) */}
-            <AllSpecialtiesModal 
-                isOpen={showAllSpecsModal} 
-                onClose={() => setShowAllSpecsModal(false)} 
-                specialties={specialtiesConfig}
-                events={events}
-                activeSlot={activeSlot} 
-                onSelect={setActiveFilter}
-                onScheduleRequest={(specId: string) => {
-                    setNewModalParams({ date: formatDateForRPC(selectedDate), time: activeSlot || '' });
-                    setShowNewModal(true);
-                }}
-            />
+            <DeleteConfirmationModal isOpen={showDeleteModal} loading={deleting} onClose={() => setShowDeleteModal(false)} onConfirm={confirmDelete} />
+
+            <AllSpecialtiesModal isOpen={showAllSpecsModal} onClose={() => setShowAllSpecsModal(false)} specialties={specialtiesConfig} events={events} activeSlot={activeSlot} onSelect={setActiveFilter} onScheduleRequest={(specId: string) => { setNewModalParams({ date: formatDateForRPC(selectedDate), time: activeSlot || '' }); setShowNewModal(true); }} />
             
             <PatientSearchModal isOpen={showSearchModal} onClose={() => setShowSearchModal(false)} patients={patients} onSelectPatient={(p: any) => { onNavigate('PATIENT_FILE', p); setShowSearchModal(false); }} />
 
             {macroViewMode && <AgendaMacroView isOpen={!!macroViewMode} initialMode={macroViewMode} timeSlots={timeSlots} onClose={() => setMacroViewMode(null)} onSelectDate={(date) => { setSelectedDate(date); setMacroViewMode(null); }} />}
 
-            {showNewModal && (
-                <AppointmentFormModal 
-                    isOpen={showNewModal}
-                    onClose={() => setShowNewModal(false)}
-                    onSuccess={() => { setShowNewModal(false); fetchAgenda(); setToast({ msg: appointmentToEdit ? 'Agendamento Atualizado!' : 'Agendamento Realizado!', type: 'success' }); }}
-                    clinicId={clinicId}
-                    specialties={specialtiesConfig}
-                    timeSlots={timeSlots}
-                    initialDate={newModalParams.date}
-                    initialTime={newModalParams.time}
-                    appointmentToEdit={appointmentToEdit}
-                />
-            )}
+            {showNewModal && <AppointmentFormModal isOpen={showNewModal} onClose={() => setShowNewModal(false)} onSuccess={() => { setShowNewModal(false); fetchAgenda(); setToast({ msg: appointmentToEdit ? 'Agendamento Atualizado!' : 'Agendamento Realizado!', type: 'success' }); }} clinicId={clinicId} specialties={specialtiesConfig} timeSlots={timeSlots} initialDate={newModalParams.date} initialTime={newModalParams.time} appointmentToEdit={appointmentToEdit} />}
 
             <DayClosingModal isOpen={showClosingModal} onClose={() => setShowClosingModal(false)} clinicId={clinicId} currentDate={selectedDate} onSuccess={() => { fetchAgenda(); setToast({ msg: 'Dia fechado com sucesso!', type: 'success' }); }} />
 
