@@ -3,8 +3,24 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
-    // Carrega todas as variáveis de ambiente, incluindo as do sistema (Vercel)
-    const env = loadEnv(mode, process.cwd(), '');
+    // 1. Carrega variáveis de arquivos .env (local)
+    const envFile = loadEnv(mode, process.cwd(), '');
+
+    // 2. BUSCA ROBUSTA (A CORREÇÃO)
+    // Prioriza process.env (Vercel System Env) sobre o arquivo .env
+    // Isso garante que a variável definida no painel da Vercel seja pega
+    const GET_VAR = (key: string) => 
+      process.env[key] || envFile[key] || '';
+
+    const REAL_API_KEY = GET_VAR('VITE_GEMINI_API_KEY') || GET_VAR('GEMINI_API_KEY');
+    const SUPABASE_URL = GET_VAR('VITE_SUPABASE_URL') || GET_VAR('SUPABASE_URL');
+    const SUPABASE_KEY = GET_VAR('VITE_SUPABASE_ANON_KEY') || GET_VAR('SUPABASE_ANON_KEY');
+
+    console.log('--- VERCEL BUILD DEBUG V2 ---');
+    console.log('Mode:', mode);
+    console.log('Gemini Key Found:', REAL_API_KEY ? `YES (Len: ${REAL_API_KEY.length})` : 'NO');
+    console.log('Supabase URL Found:', SUPABASE_URL ? 'YES' : 'NO');
+    console.log('-----------------------------');
 
     return {
       server: {
@@ -13,17 +29,16 @@ export default defineConfig(({ mode }) => {
       },
       plugins: [react()],
       define: {
-        // CORREÇÃO CRÍTICA:
-        // Pega a variável VITE_GEMINI_API_KEY (definida na Vercel)
-        // E injeta na variável process.env.GEMINI_API_KEY (usada pelo SDK do Google)
-        'process.env.GEMINI_API_KEY': JSON.stringify(env.VITE_GEMINI_API_KEY),
+        // Injeção direta e forçada das variáveis capturadas
+        'process.env.API_KEY': JSON.stringify(REAL_API_KEY),
+        'process.env.GEMINI_API_KEY': JSON.stringify(REAL_API_KEY),
+        'process.env.VITE_GEMINI_API_KEY': JSON.stringify(REAL_API_KEY),
         
-        // Garante que funciona também se o código chamar com VITE_
-        'process.env.VITE_GEMINI_API_KEY': JSON.stringify(env.VITE_GEMINI_API_KEY),
-        
-        // Bridge para Supabase (caso necessário)
-        'process.env.SUPABASE_URL': JSON.stringify(env.VITE_SUPABASE_URL),
-        'process.env.SUPABASE_ANON_KEY': JSON.stringify(env.VITE_SUPABASE_ANON_KEY),
+        // Supabase
+        'process.env.SUPABASE_URL': JSON.stringify(SUPABASE_URL),
+        'process.env.SUPABASE_ANON_KEY': JSON.stringify(SUPABASE_KEY),
+        'process.env.VITE_SUPABASE_URL': JSON.stringify(SUPABASE_URL),
+        'process.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(SUPABASE_KEY),
       },
       resolve: {
         alias: {
